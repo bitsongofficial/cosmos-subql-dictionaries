@@ -1,29 +1,7 @@
-import { parseRawLog } from "@cosmjs/stargate/build/logs";
-import { hexDataSlice, stripZeros } from "@ethersproject/bytes";
-
 // Make BigInt json serializable, note this doesn't go from string -> BigInt when parsing
 (BigInt.prototype as any).toJSON = function () {
     return this.toString();
 };
-
-
-export function inputToFunctionSighash(input: string): string {
-    return hexDataSlice(input, 0, 4);
-}
-
-export function isZero(input: string): boolean {
-    return stripZeros(input).length === 0;
-}
-export function isSuccess(rawLog: string | undefined, index: number): boolean {
-    try {
-      const log = parseRawLog(rawLog).find((l) => l.msg_index === index);
-      const txLog = log?.events.find((evt) => evt.type === 'ethereumTx');
-      const failLog = txLog?.attributes.find((attr) => attr.key === 'ethereumTxFailed');
-      return failLog === undefined;
-    } catch (e) {
-      return false;
-    }
-}
 
 export function stripObjectUnicode(t: object): object {
     if (!t) return t;

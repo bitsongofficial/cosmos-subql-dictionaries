@@ -1,10 +1,9 @@
 import { CosmosEvent, CosmosMessage } from "@subql/types-cosmos";
-import { Event, EvmLog, EvmTransaction, Message } from "../types";
-import { inputToFunctionSighash, isSuccess, isZero, stripObjectUnicode } from "../utils";
+import { Event, Message } from "../types";
+import { stripObjectUnicode } from "../utils";
 
 export async function handleEvent(event: CosmosEvent) {
     const blockHeight = BigInt(event.block.block.header.height);
-
 
     const eventStore = Event.create({
         id: `${event.block.block.id}-${event.idx}`,
@@ -16,11 +15,6 @@ export async function handleEvent(event: CosmosEvent) {
     });
 
     await eventStore.save();
-
-    // Cronos uses snake case "ethereum_tx"
-    if(event.event.type === 'ethereumTx' || event.event.type === 'ethereum_tx') {
-       await handleEvmLog(event);
-    }
 }
 
 export async function handleMessage(message: CosmosMessage) {
@@ -41,63 +35,4 @@ export async function handleMessage(message: CosmosMessage) {
     });
 
     await messageStore.save();
-
-    if(message.msg.typeUrl === "/ethermint.evm.v1.MsgEthereumTx") {
-        await handleEvmTransaction(message);
-    }
-}
-
-export async function handleEvmTransaction(message: CosmosMessage) {
-
-    const blockHeight = BigInt(message.block.block.header.height);
-    const tx = message.msg.decodedMsg as any;
-    const decodedTx = registry.decode(tx.data);
-
-    const func = isZero(decodedTx.data) ? undefined : inputToFunctionSighash(decodedTx.data).toLowerCase();
-
-    const txStore = EvmTransaction.create({
-        id: `${message.block.block.id}-${message.tx.hash}-${message.idx}`,
-        txHash: tx.hash,
-        blockHeight,
-        from: tx.from.toLowerCase(),
-        to: decodedTx.to === '' ? undefined : decodedTx.to?.toLowerCase(),
-        func: func,
-        success: isSuccess(message.tx.tx.log, message.idx),
-    });
-
-    await txStore.save();
-}
-
-export async function handleEvmLog(event: CosmosEvent) {
-    const log = event.log;
-    const blockHeight = BigInt(event.block.block.header.height);
-    const evmLogs: EvmLog[] = [];
-
-    // Cronos uses snake case `tx_log`
-    const logAttributes = log.events
-        .find(evt => evt.type === 'ethereumTx' || evt.type === 'tx_log')
-        ?.attributes ?? [];
-    for(const attr of logAttributes) {
-        if(attr.key !== 'txLog') {
-            continue;
-        }
-
-        const tx = JSON.parse(attr.value);
-
-        const evmLog = EvmLog.create({
-            id: `${event.block.block.id}-${event.tx.hash}-${tx.logIndex ?? event.idx}`,
-            blockHeight,
-            address: tx.address,
-            topics0: tx.topics?.[0]?.toLowerCase() ?? '',
-            topics1: tx.topics?.[1]?.toLowerCase(),
-            topics2: tx.topics?.[2]?.toLowerCase(),
-            topics3: tx.topics?.[3]?.toLowerCase(),
-        });
-
-        evmLogs.push(evmLog);
-    }
-
-    for (const evmLog of evmLogs) {
-        await evmLog.save()
-    }
 }
